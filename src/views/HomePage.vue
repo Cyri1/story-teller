@@ -2,11 +2,10 @@
   <ion-page>
     <ion-content :fullscreen="true">
       <div id="container">
-        <swiper :loop="false" @slideChangeTransitionEnd="readAudio">
+        <swiper :loop="false" @slideChangeTransitionEnd="readAudioActiveSlide">
           <swiper-slide v-for="(slide, index) in activeSlides" :key="index">
-            <ion-img @click="storeActiveStoryIndex(index), okTransition(slide.okTransition.actionNode, slide.okTransition.optionIndex)"
-              :src="convertPath(slide.image)"
-            ></ion-img>
+            <ion-img @click="storeActiveStoryIndex(index), clickOk(slide.actionNode)" :src="convertPath(slide.image)">
+            </ion-img>
           </swiper-slide>
         </swiper>
         <button @click="click" color="primary">
@@ -47,7 +46,7 @@ export default {
       activeStoryIndex: null,
     };
   },
-  mounted() {},
+  mounted() { },
   methods: {
     click() {
       Filesystem.readdir({
@@ -100,6 +99,7 @@ export default {
     click2() {
       console.log(this.jsonStories);
       console.log(this.activeSlides);
+      console.log(this.activeStoryIndex);
     },
     storeActiveStoryIndex(index) {
       this.activeStoryIndex = index;
@@ -109,7 +109,7 @@ export default {
         var storyName = story.name;
         for (var node of story.stageNodes) {
           if (node.squareOne) {
-            var obj = {
+            var slide = {
               audio:
                 "file:///storage/emulated/0/Documents/packs/" +
                 storyName +
@@ -120,30 +120,81 @@ export default {
                 storyName +
                 "/assets/" +
                 node.image,
-              okTransition: {
-                actionNode: node.okTransition.actionNode,
-                optionIndex: node.okTransition.optionIndex,
-              },
+              actionNode: node.okTransition.actionNode
             };
-            this.activeSlides.push(obj);
+            this.activeSlides.push(slide);
             this.homeButton = { homeTransition: node.homeTransition };
           }
         }
       }
     },
-    okTransition(actionNodeID, optionIndex) {
-      for (var actionNode of this.jsonStories[this.activeStoryIndex].actionNodes) {
-        if(actionNode.id == actionNodeID) {
-          console.log(actionNode.options[optionIndex]);
+    clickOk(actionNodeID) {
+      var storyName = this.jsonStories[this.activeStoryIndex].name
+      var nextStageId = this.searchStageNode(actionNodeID)
+      // return [0: "id-id-id-id-id"]
+      console.log('next stage : ');
+      console.log(nextStageId);
+      var nextActionNodes = this.searchActionNode(nextStageId)
+      // return [0: {audio: xxx.mp3, controlSettings: {wheel:..., autoplay: true/false}, homeTransition, image, okTransition: {actionNode: xxx-xxx-xxx, optionIndex: 0}, }]
+      console.log('next action : ');
+      console.log(nextActionNodes);
+
+      if (nextActionNodes[0].controlSettings.autoplay) { // if autoplay = true, it means that node is audio of slide set
+        this.readAudio("file:///storage/emulated/0/Documents/packs/" +
+          storyName +
+          "/assets/" +
+          nextActionNodes[0].audio)
+        this.clickOk(nextActionNodes[0].okTransition.actionNode)
+      } else {
+        this.activeSlides = [];
+        for (var node of nextActionNodes) {
+          var slide = {
+            audio:
+              "file:///storage/emulated/0/Documents/packs/" +
+              storyName +
+              "/assets/" +
+              node.audio,
+            image:
+              "file:///storage/emulated/0/Documents/packs/" +
+              storyName +
+              "/assets/" +
+              node.image,
+            actionNode: node.okTransition.actionNode
+          };
+          this.homeButton = { homeTransition: node.homeTransition };
+          this.activeSlides.push(slide);
         }
       }
+    },
+    searchStageNode(actionNodeID) {
+      for (var actionNode of this.jsonStories[this.activeStoryIndex].actionNodes) {
+        if (actionNode.id === actionNodeID) {
+          var nextStageId = actionNode.options
+        }
+      }
+      return nextStageId
+    },
+    searchActionNode(nextStageId) {
+      var stageNodeResult = [];
+      for (var stageOption of nextStageId) {
+        for (var stageNode of this.jsonStories[this.activeStoryIndex].stageNodes) {
+          if (stageNode.uuid === stageOption) {
+            stageNodeResult.push(stageNode)
+          }
+        }
+      }
+      return stageNodeResult
     },
     convertPath(path) {
       return Capacitor.convertFileSrc(path);
     },
-    readAudio(swiper) {
+    readAudioActiveSlide(swiper) {
       var audioFilePath = this.convertPath(this.activeSlides[swiper.activeIndex].audio);
       var playAudio = new Audio(audioFilePath);
+      playAudio.play();
+    },
+    readAudio(audioFilePath) {
+      var playAudio = new Audio(this.convertPath(audioFilePath));
       playAudio.play();
     },
   },
@@ -159,16 +210,19 @@ export default {
   top: 50%;
   transform: translateY(-50%);
 }
+
 #container strong {
   font-size: 20px;
   line-height: 26px;
 }
+
 #container p {
   font-size: 16px;
   line-height: 22px;
   color: #8c8c8c;
   margin: 0;
 }
+
 #container a {
   text-decoration: none;
 }
